@@ -1,47 +1,37 @@
 import express, { Request, Response } from "express";
+import "dotenv/config";
+import { auth } from "./lib/auth";
+import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
+import cors from "cors";
+
 const app = express();
 const PORT = process.env.PORT || 3000;
-import "dotenv/config";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { usersTable } from "./db/schema";
-import { eq } from "drizzle-orm";
 
-const db = drizzle(process.env.DATABASE_URL!);
-
-async function main() {
-  const user: typeof usersTable.$inferInsert = {
-    name: "John",
-    age: 30,
-    email: "john@example.com",
-  };
-  await db.insert(usersTable).values(user);
-  console.log("New user created!");
-  const users = await db.select().from(usersTable);
-  console.log("Getting all users from the database: ", users);
-  /*
-  const users: {
-    id: number;
-    name: string;
-    age: number;
-    email: string;
-  }[]
-  */
-  await db
-    .update(usersTable)
-    .set({
-      age: 31,
-    })
-    .where(eq(usersTable.email, user.email));
-  console.log("User info updated!");
-  await db.delete(usersTable).where(eq(usersTable.email, user.email));
-  console.log("User deleted!");
-}
-main();
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  }),
+);
+app.all("/api/auth/*splat", toNodeHandler(auth));
 
 app.use(express.json());
 
 app.get("/", (req: Request, res: Response) => {
   res.send("Hello, TypeScript with Express!");
+});
+
+// Contoh protected route menggunakan fromNodeHeaders
+app.get("/api/me", async (req: Request, res: Response) => {
+  const session = await auth.api.getSession({
+    headers: fromNodeHeaders(req.headers), 
+  });
+  if (!session) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  res.json(session);
 });
 
 app.listen(PORT, () => {
