@@ -10,8 +10,12 @@
     "start": "node dist/index.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "Moh TB Derajatul Ula",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Derajatul/typecommerce.git"
+  },
   "type": "module",
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",

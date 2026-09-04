@@ -29,7 +29,12 @@ extendZodWithOpenApi(z);
 // Kompatibilitas Zod 4: di Zod 4, kelas seperti ZodObject dan ZodString tidak lagi mewarisi ZodType.prototype secara langsung.
 for (const key in z) {
   const item = (z as any)[key];
-  if (key.startsWith("Zod") && typeof item === "function" && item.prototype && !item.prototype.openapi) {
+  if (
+    key.startsWith("Zod") &&
+    typeof item === "function" &&
+    item.prototype &&
+    !item.prototype.openapi
+  ) {
     item.prototype.openapi = (z.ZodType.prototype as any).openapi;
   }
 }
