@@ -3,6 +3,13 @@ import { db } from "../db/index";
 import { products } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { hasRole, isAuthenticated } from "../middlewares/auth.middleware";
+import { validateBody } from "../middlewares/validata.middleware";
+import {
+  CreateProductInput,
+  createProductSchema,
+  UpdateProductInput,
+  updateProductSchema,
+} from "../schemas/product.schema";
 
 const productRouter = express.Router();
 
@@ -50,45 +57,43 @@ productRouter.get("/:id", async (req, res) => {
 });
 
 // POST /api/products - Create a new product admin only
-productRouter.post("/", isAuthenticated, hasRole("admin"), async (req, res) => {
-  try {
-    const { name, slug, price, description, categoryId, stock } = req.body;
-    const newProduct = await db
-      .insert(products)
-      .values({
-        name,
-        slug,
-        description,
-        price,
-        stock: stock ?? 0,
-        categoryId,
-      })
-      .returning();
-    return res.status(201).json({
-      success: true,
-      message: "Product created successfully",
-      data: newProduct,
-    });
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "23505") {
-      // Unique violation error code for PostgreSQL
-      return res.status(409).json({
+productRouter.post(
+  "/",
+  isAuthenticated,
+  hasRole("admin"),
+  validateBody(createProductSchema),
+  async (req, res) => {
+    try {
+      const data: CreateProductInput = req.body;
+
+      const newProduct = await db.insert(products).values(data).returning();
+      return res.status(201).json({
+        success: true,
+        message: "Product created successfully",
+        data: newProduct,
+      });
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "23505") {
+        // Unique violation error code for PostgreSQL
+        return res.status(409).json({
+          success: false,
+          message: "Product with this slug already exists",
+        });
+      }
+      return res.status(500).json({
         success: false,
-        message: "Product with this slug already exists",
+        message: "Error creating product",
       });
     }
-    return res.status(500).json({
-      success: false,
-      message: "Error creating product",
-    });
-  }
-});
+  },
+);
 
 // PUT /api/products/:id - Update a product by ID (admin only)
 productRouter.put(
   "/:id",
   isAuthenticated,
   hasRole("admin"),
+  validateBody(updateProductSchema),
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -98,17 +103,13 @@ productRouter.put(
           message: "Invalid product ID",
         });
       }
-      const { name, slug, price, description, categoryId, stock } = req.body;
+      const data: UpdateProductInput = req.body;
 
       const [updatedProduct] = await db
         .update(products)
         .set({
-          name,
-          slug,
-          description,
-          price,
-          stock: stock ?? 0,
-          categoryId,
+          ...data,
+          updatedAt: new Date(),
         })
         .where(eq(products.id, id))
         .returning();
