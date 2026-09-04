@@ -53,6 +53,6 @@ app.use("/api/orders", orderRouter);
 app.use("/api/addresses", addressRouter);
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server is running on port http://localhost:${PORT}`);
   console.log(`Swagger Docs available at http://localhost:${PORT}/api-docs`);
 });
