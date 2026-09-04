@@ -18,7 +18,8 @@ export const isAuthenticated = async (
         message: "Unauthorized",
       });
     }
-    (req as any).session = session;
+    (req as any).session = session.session;
+    (req as any).user = session.user;
     next();
   } catch (error) {
     return res.status(500).json({
@@ -32,14 +33,14 @@ export const isAuthenticated = async (
 export const hasRole = (role: string) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const session = (req as any).session;
-      if (!session) {
+      const user = (req as any).user;
+      if (!user) {
         return res.status(401).json({
           success: false,
           message: "Unauthorized",
         });
       }
-      if (session.user.role !== role) {
+      if (user.role !== role) {
         return res.status(403).json({
           success: false,
           message: "Forbidden",

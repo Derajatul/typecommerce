@@ -1,10 +1,14 @@
 import express from "express";
 import { hasRole, isAuthenticated } from "../middlewares/auth.middleware";
 import { validateBody } from "../middlewares/validata.middleware";
-import { CreateOrderInput, createOrderSchema } from "../schemas/order.schema";
+import {
+  CreateOrderInput,
+  createOrderSchema,
+  updateOrderStatusSchema,
+} from "../schemas/order.schema";
 import { addresses, orderItems, orders, products } from "../db/schema";
 import { db } from "../db/index";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 
 const orderRouter = express.Router();
 
@@ -31,10 +35,10 @@ orderRouter.post(
         .where(eq(addresses.id, shippingAddressId))
         .limit(1);
 
-      if (!address) {
+      if (!address || address.userId !== user.id) {
         return res.status(400).json({
           success: false,
-          message: "Invalid shipping address",
+          message: "Invalid or unauthorized shipping address",
         });
       }
 
@@ -90,53 +94,70 @@ orderRouter.post(
           price: prod.price,
           subtotal: itemSubtotal,
         });
+      }
 
-        const calculatedTotal = calculatedSubtotal + shippingFee;
+      const calculatedTotal = calculatedSubtotal + shippingFee;
 
-        const newOrder = await db.transaction(async (tx) => {
-          // insert to order table
-          const [order] = await tx
-            .insert(orders)
-            .values({
-              userId: user.id,
-              status: "pending",
-              subtotal: calculatedSubtotal,
-              shippingFee,
-              total: calculatedTotal,
-              shippingAddressId,
-            })
-            .returning();
-          // insert to order_items table
-          await tx.insert(orderItems).values(
-            preparedOrderItems.map((item) => ({
-              ...item,
-              orderId: order.id,
-            })),
-          );
+      const newOrder = await db.transaction(async (tx) => {
+        // insert to order table
+        const [order] = await tx
+          .insert(orders)
+          .values({
+            userId: user.id,
+            status: "pending",
+            subtotal: calculatedSubtotal,
+            shippingFee,
+            total: calculatedTotal,
+            shippingAddressId,
+          })
+          .returning();
 
-          // update product stock
-          for (const item of items) {
-            const prod = productMap.get(item.productId);
+        // insert to order_items table
+        await tx.insert(orderItems).values(
+          preparedOrderItems.map((item) => ({
+            ...item,
+            orderId: order.id,
+          })),
+        );
 
-            if (prod) {
-              await tx
-                .update(products)
-                .set({ stock: prod.stock - item.quantity })
-                .where(eq(products.id, prod.id));
+        // update product stock atomically (prevent race conditions & overselling)
+        for (const item of items) {
+          const prod = productMap.get(item.productId);
+
+          if (prod) {
+            const [deducted] = await tx
+              .update(products)
+              .set({ stock: sql`${products.stock} - ${item.quantity}` })
+              .where(
+                and(
+                  eq(products.id, prod.id),
+                  gte(products.stock, item.quantity),
+                ),
+              )
+              .returning();
+
+            if (!deducted) {
+              throw new Error(`Insufficient stock for product ${prod.name}`);
             }
           }
+        }
 
-          return order;
-        });
+        return order;
+      });
 
-        return res.status(201).json({
-          success: true,
-          message: "Order created successfully",
-          data: newOrder,
+      return res.status(201).json({
+        success: true,
+        message: "Order created successfully",
+        data: newOrder,
+      });
+    } catch (error: any) {
+      console.error("Error creating order:", error);
+      if (error?.message?.startsWith("Insufficient stock")) {
+        return res.status(400).json({
+          success: false,
+          message: error.message,
         });
       }
-    } catch (error) {
-      console.error("Error creating order:", error);
       return res.status(500).json({
         success: false,
         message: "Error creating order",
@@ -249,6 +270,7 @@ orderRouter.patch(
   "/:id/status",
   isAuthenticated,
   hasRole("admin"),
+  validateBody(updateOrderStatusSchema),
   async (req, res) => {
     try {
       const { id } = req.params;

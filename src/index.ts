@@ -12,16 +12,16 @@ import addressRouter from "./routes/address.route";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS � sebelum semua middleware
+// CORS – sebelum semua middleware
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL,
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true,
   }),
 );
 
-// Better Auth handler � sebelum express.json()
+// Better Auth handler  sebelum express.json()
 app.all("/api/auth/*splat", toNodeHandler(auth));
 
 // Body parser

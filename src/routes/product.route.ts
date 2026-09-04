@@ -66,7 +66,7 @@ productRouter.post(
     try {
       const data: CreateProductInput = req.body;
 
-      const newProduct = await db.insert(products).values(data).returning();
+      const [newProduct] = await db.insert(products).values(data).returning();
       return res.status(201).json({
         success: true,
         message: "Product created successfully",
